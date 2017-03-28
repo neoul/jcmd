@@ -1,0 +1,22 @@
+{
+	"echo": {
+		"help": "print a string on screen",
+		"cmd": {
+			"shell": "echo {string}"
+		},
+		"args": {
+			"string": {
+				"help": "echo string"
+			}
+		}
+	},
+	"sleep": {
+		"help": "print a string on screen",
+		"cmd": {
+			"shell": "sleep {time}"
+		},
+		"args": {
+			"time": "sleep time" 
+		}
+	}
+}

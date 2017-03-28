@@ -66,8 +66,8 @@ class JNode(dict):
             finally:
                 self.update_args()
 
-        if "cmddic" in kargs:
-            self.load_from_dict(kargs["cmddic"])
+        if "cmddict" in kargs:
+            self.load_from_dict(kargs["cmddict"])
         if "cmdjson" in kargs:
             self.load_from_json(kargs["cmdjson"])
         if "cmdfile" in kargs:
@@ -118,22 +118,20 @@ class JCmd:
     """Json Command Line interface
     A simple framework for writing line-oriented command interpreters."""
 
-    prompt = PROMPT
     identchars = IDENTCHARS
 
     intro = "\n [Json Command Line Interface]\n"
+    completion_matches = list()
     use_rawinput = True
-    cmdtree = JNode()
     end = False
     line = ''
-    completion_matches = list()
-    start_time = None
-    end_time = None
 
     def __init__(
             self, completekey='tab', stdin=None, stdout=None, **kargs):
         """Instantiate a Json Command Line Interface."""
 
+        self.prompt = PROMPT
+        self.cmdtree = JNode()
         if stdin is not None:
             self.stdin = stdin
         else:
@@ -176,6 +174,14 @@ class JCmd:
             }
         })
 
+    def load(self, cmdfile='', cmddict=None, cmdjson=''):
+        if cmddict:
+            self.cmdtree.load_from_dict(cmddict)
+        elif cmdfile:
+            self.cmdtree.load_from_file(cmdfile)
+        elif cmdjson:
+            self.cmdtree.load_from_json(cmdjson)
+
     def _input_hook(self):
         "Input hook for adding a string to the line."
         if self.line:
@@ -183,7 +189,7 @@ class JCmd:
             readline.redisplay()
             self.line = ''
 
-    def cmdloop(self, intro=None):
+    def cmdloop(self, prompt=None, intro=None):
         """Repeatedly issue a prompt, accept input, parse an initial prefix
         off the received input, and dispatch to action methods, passing them
         the remainder of the line as argument.
@@ -214,6 +220,8 @@ class JCmd:
                 self.intro = intro
             if self.intro:
                 self.stdout.write(str(self.intro)+"\n")
+            if prompt is not None:
+                self.prompt = prompt
             stop = None
             while not stop:
                 if self.cmdqueue:
@@ -245,14 +253,10 @@ class JCmd:
 
     def precmd(self, line):
         """Hook method executed just before the command dispatch."""
-        self.start_time = time.time()
         return line
 
     def postcmd(self, stop, line):
         """Hook method executed just after a command dispatch is finished."""
-        self.end_time = time.time()
-        elapsed = round(self.end_time - self.start_time, 5)
-        self.stdout.write("\n  elapsed time: %d\n" % elapsed)
         return stop
 
     def preloop(self):
@@ -504,6 +508,7 @@ class JCmd:
 
     def do_eof(self):
         """ctrl-d (end of Json Command Interface)"""
+        self.stdout.write("\n")
         self.end = True
 
 

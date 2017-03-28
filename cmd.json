@@ -71,5 +71,11 @@
 				}
 			}
 		}
+	},
+	"sub-mode": {
+		"help": "change mode",
+		"cmd": {
+			"func": "JCmd(cmdfile='sub-cmd.json').cmdloop(prompt='sub-mode> ', intro='Sub-mode Intro!')"
+		}
 	}
 }
