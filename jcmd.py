@@ -419,9 +419,13 @@ class JCmd:
                 else:
                     slist = cmd_node.shell
                 cmd_list = [shell.format(**inputs) for shell in slist]
-                for cmd_str in cmd_list:
-                    self.stdout.write('  shell: %s\n' % cmd_str)
-                    subprocess.run(cmd_str, shell=True, check=True)
+                # for cmd_str in cmd_list:
+                #    self.stdout.write('  shell: %s\n' % cmd_str)
+                #    subprocess.run(cmd_str, shell=True, check=True)
+                cmd_str = ' && '.join(cmd_list)
+                self.stdout.write('  shell: %s\n' % cmd_str)
+                subprocess.run(cmd_str, shell=True, check=True)
+
             except KeyError as ex:
                 self.stdout.write("  No argument: %s\n" % (ex))
             except BaseException as ex:
