@@ -37,7 +37,6 @@ EOF = "EOF"
 COMPLETE = "complete"
 COMPLETE_IGNORES = set([EXEC_SHELL, BRIEF_HELP, EOF])
 
-
 class JNode(dict):
     """Json Command Interface Node"""
 
@@ -277,13 +276,13 @@ class JCmd:
         incomplete = ''
         line = line[:endidx]
         words = shlex.split(line)
-        if begidx != endidx:
-            incomplete = words[-1]
         for i, word in enumerate(words):
             spliter = word.find('=')
             if spliter >= 0:
                 args[word[:spliter]] = word[spliter + 1:]
                 words[i] = word[:spliter]
+        if begidx != endidx:
+            incomplete = words[-1]
         return words, incomplete, args
 
     @staticmethod
@@ -353,7 +352,7 @@ class JCmd:
                     cur_node.args, word, ignores, tail='=')
                 if not nextargs:
                     return []
-                if incomplete.startswith(word):
+                if incomplete == word:
                     if word in args:
                         return self._next_data(cur_node.args, word, args[word])
                     return nextargs
