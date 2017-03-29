@@ -522,4 +522,8 @@ class JCmd:
 
 
 if __name__ == "__main__":
-    JCmd(cmdfile="cmd.json").cmdloop()
+    try:
+        argv = sys.argv[1]
+        JCmd(cmdfile=argv).cmdloop()
+    except IndexError:
+        JCmd().cmdloop()
