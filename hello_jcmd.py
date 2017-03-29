@@ -5,12 +5,12 @@ Example for Json Command Interface library
 """
 import jcmd
 
-class mycmd(jcmd.JCmd):
+class MyCmd(jcmd.JCmd):
     #prompt = "mycli> "
     pass
 
 if __name__ == "__main__":
-    j = jcmd.JCmd()
+    j = MyCmd()
     hello = {
         "hello": {
             "help": "jcmd hello example",

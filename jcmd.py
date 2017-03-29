@@ -30,6 +30,7 @@ HELP = "help"
 NO_HELP = "no help"
 FUNC = "func"
 SHELL = "shell"
+SUBTREE = "subtree"
 EXEC_SHELL = "!"
 BRIEF_HELP = "?"
 EOF = "EOF"
@@ -43,6 +44,7 @@ class JNode(dict):
     def __init__(self, *args, **kargs):
         self.func = None
         self.shell = None
+        self.subtree = None
         self.complete = None
         super().__init__(*args)
         try:
@@ -422,6 +424,13 @@ class JCmd:
                     subprocess.run(cmd_str, shell=True, check=True)
             except KeyError as ex:
                 self.stdout.write("  No argument: %s\n" % (ex))
+            except BaseException as ex:
+                self.stdout.write("  Failed: %s\n" % (ex))
+        elif cmd_node.subtree:
+            try:
+                intro = cmd_node.subtree.get("intro")
+                prompt = cmd_node.subtree.get("prompt")
+                JCmd(cmdfile=cmd_node.subtree["file"]).cmdloop(prompt, intro)
             except BaseException as ex:
                 self.stdout.write("  Failed: %s\n" % (ex))
         return self.end
