@@ -1,8 +1,33 @@
 #!/usr/bin/env python3
-# neoul@ymail.com
 """
-Json Command Interface library
-A generic class to build line-oriented command interpreters.
+The class to build line-oriented command interpreters using JSON and dictionary
+
+This class is used to provide a simple framework for writing line-oriented
+command interpreters. The user-defined commands written in Python dictionary 
+or JSON format are loaded and executed by this class.
+
+This class is based on Python cmd library that is a motivation to make it.
+It would be more useful due to the following conveniences.
+
+- It supports hierarchical command tree as communication equipment's CLI.
+- It supports to load and execute commands from JSON or Python dictionary.
+- It supports built-in tab-completion.
+    - less considerable tab-completion
+- It supports arguments separated from The commands.
+- It supports shell command execution and Python function call.
+- It supports to show the help of the command in detail.
+- It supports the brief command list (The key is mapping to '?')
+- It supports the sub mode.
+  - It loads a different command tree at runtime.
+- It supports the default value for the argument.
+
+
+Further study
+
+- Scripting
+- Enumeration, range and pattern for argument
+
+neoul@ymail.com
 """
 
 import sys
@@ -11,18 +36,15 @@ import json
 import glob
 import shlex
 import subprocess
-import time
-
-# [TBD] readline is not supported on windows.
-# Use pyreadline instead ...
-import readline
+try:
+    import readline
+except ImportError:
+    import pyreadline
 
 __all__ = ["JCmd"]
 
 PROMPT = 'jcmd> '
 IDENTCHARS = string.ascii_letters + string.digits + '_'
-
-LOG_FILENAME = 'jcmd.log'
 
 CMD = "cmd"
 ARGS = "args"
@@ -38,7 +60,7 @@ COMPLETE = "complete"
 COMPLETE_IGNORES = set([EXEC_SHELL, BRIEF_HELP, EOF])
 
 class JNode(dict):
-    """Json Command Interface Node"""
+    """JSON Command Tree Node"""
 
     def __init__(self, *args, **kargs):
         self.func = None
@@ -65,7 +87,7 @@ class JNode(dict):
             except KeyError:
                 self.args = JNode()
             finally:
-                self.update_args()
+                self._update_args()
 
         if "cmddict" in kargs:
             self.load_from_dict(kargs["cmddict"])
@@ -77,31 +99,31 @@ class JNode(dict):
     # def __missing__(self, key):
     #     return JNode()
 
-    def update_args(self):
-        """internal method for update arguments"""
+    def _update_args(self):
+        """Internal method to update arguments of the JSON Command Tree Node"""
         for key, value in self.args.items():
             if not isinstance(value, dict):
                 self.args[key] = JNode({"help":value})
 
     def load_from_dict(self, dic):
-        """load Json Command Interface node from a dictionary"""
+        """Load JSON Command Tree Node from a dictionary"""
         jdata = json.dumps(dic)
         self.load_from_json(jdata)
 
     def load_from_json(self, jdata):
-        """load Json Command Interface node from json string"""
+        """Load JSON Command Tree Node from json string"""
         def hooker(dic):
-            """hooker for loading Json Command Interface."""
+            """hooker for loading JSON Command Tree."""
             return JNode(dic)
         self.update(json.loads(jdata, object_hook=hooker))
 
     def load_from_file(self, cmdfile=None):
-        """load Json Command Interface node from json file"""
+        """Load JSON Command Tree Node from json file"""
         with open(cmdfile, "r") as cfile:
             self.load_from_json(cfile.read())
 
     def find(self, jnodes=(), bestmatch=False):
-        """find a Json Command interface node"""
+        """Find a JSON Command Tree Node in command tree"""
         index = 0
         cnode = self
         for i, jnode in enumerate(jnodes):
@@ -116,23 +138,19 @@ class JNode(dict):
 
 
 class JCmd:
-    """Json Command Line interface
-    A simple framework for writing line-oriented command interpreters."""
-
+    """Line-oriented Command class using JSON and dictionary"""
     identchars = IDENTCHARS
-
-    intro = "\n [Json Command Line Interface]\n"
+    intro = "\n [Line-oriented Command Interface using JSON]\n"
     completion_matches = list()
     use_rawinput = True
     end = False
     line = ''
 
     def __init__(
-            self, completekey='tab', stdin=None, stdout=None, **kargs):
-        """Instantiate a Json Command Line Interface."""
-
+            self, stdin=None, stdout=None, **kargs):
+        """Instantiate a JSON Line-oriented Command class"""
         self.prompt = PROMPT
-        self.cmdtree = JNode()
+        self.cmdtree = JNode() # JCmd command tree
         if stdin is not None:
             self.stdin = stdin
         else:
@@ -142,13 +160,14 @@ class JCmd:
         else:
             self.stdout = sys.stdout
         self.cmdqueue = []
-        self.completekey = completekey
+        self.old_completer = None
 
         try:
-            self.cmdtree.load_from_file(kargs["cmdfile"])
+            self.load(**kargs)
         except (FileNotFoundError, json.decoder.JSONDecodeError) as ex:
             self.stdout.write("%s\n" % ex)
         except KeyError as ex:
+
             pass
 
         # Built-in commands
@@ -176,6 +195,7 @@ class JCmd:
         })
 
     def load(self, cmdfile='', cmddict=None, cmdjson=''):
+        """Load the JCmd command tree"""
         if cmddict:
             self.cmdtree.load_from_dict(cmddict)
         elif cmdfile:
@@ -184,23 +204,21 @@ class JCmd:
             self.cmdtree.load_from_json(cmdjson)
 
     def _input_hook(self):
-        "Input hook for adding a string to the line."
+        """Input hook for adding a string to the new line."""
         if self.line:
             readline.insert_text(self.line)
             readline.redisplay()
             self.line = ''
 
     def cmdloop(self, prompt=None, intro=None):
-        """Repeatedly issue a prompt, accept input, parse an initial prefix
-        off the received input, and dispatch to action methods, passing them
-        the remainder of the line as argument.
-        """
+        """Repeatedly issue a prompt, accept input, parse the input, and
+        dispatch to execute the function or shell commands."""
         self.preloop()
-        if self.use_rawinput and self.completekey:
+        if self.use_rawinput:
             try:
                 self.old_completer = readline.get_completer()
                 readline.set_completer(self.complete)
-                readline.parse_and_bind(self.completekey+": complete")
+                readline.parse_and_bind('tab: complete')
                 readline.parse_and_bind('set comment-begin "? "')
                 readline.parse_and_bind('?: insert-comment')
                 delims = readline.get_completer_delims()
@@ -215,7 +233,6 @@ class JCmd:
                 readline.set_pre_input_hook(self._input_hook)
             except ImportError:
                 self.stdout.write("Unable to initialize readline.")
-                pass
         try:
             if intro is not None:
                 self.intro = intro
@@ -246,7 +263,7 @@ class JCmd:
                 stop = self.postcmd(stop, line)
             self.postloop()
         finally:
-            if self.use_rawinput and self.completekey:
+            if self.use_rawinput:
                 try:
                     readline.set_completer(self.old_completer)
                 except ImportError:
@@ -261,15 +278,16 @@ class JCmd:
         return stop
 
     def preloop(self):
-        "Hook method before the cmdloop() is called."
+        """Hook method before the cmdloop() is called."""
         pass
 
     def postloop(self):
-        "Hook method after the cmdloop() returns"
+        """Hook method after the cmdloop() returns"""
         pass
 
-    def parseline(self, line, begidx=-1, endidx=-1):
-        """Parse the line"""
+    @staticmethod
+    def _parseline(line, begidx=-1, endidx=-1):
+        """Parse the line of the input"""
         if begidx == -1 or endidx == -1:
             begidx = endidx = len(line)
         args = dict()
@@ -285,9 +303,8 @@ class JCmd:
             incomplete = words[-1]
         return words, incomplete, args
 
-    @staticmethod
-    def _next_words(cur_node, cur_word='', ignores=(), tail=''):
-        """list of next nodes in cmdtree"""
+    def next_words(self, cur_node, cur_word='', ignores=(), tail=''):
+        """Return a list of next candidate nodes of the JCmd command tree."""
         try:
             clist = [c + tail for c in cur_node if
                      c.startswith(cur_word) and c not in COMPLETE_IGNORES and
@@ -297,9 +314,8 @@ class JCmd:
         else:
             return clist
 
-    @staticmethod
-    def _next_data(argtree, cur_arg, cur_data):
-        """list of next data in a argument completion"""
+    def next_data(self, argtree, cur_arg, cur_data):
+        """Return a list of next candidate data for argument completion."""
         try:
             argtype = argtree[cur_arg]["type"]
             if argtype == "path":
@@ -310,7 +326,7 @@ class JCmd:
             return [cur_arg + '=' + cur_data]
 
     def completeline(self, words, incomplete, args):
-        """JCmd parse command"""
+        """Return a list of next candidate completion string to readline."""
         cur_node = self.cmdtree
         remainder = words[:]
         remove = remainder.remove
@@ -326,11 +342,11 @@ class JCmd:
                 break
             except AttributeError:
                 pass
-            except BaseException as ex:
+            except BaseException:
                 return []
         if not isinstance(cur_node, dict):
             return []
-        get_next = self._next_words
+        get_next = self.next_words
         if not remainder:
             nextwords = get_next(cur_node, tail=' ')
             if cur_node.eoc:
@@ -354,7 +370,7 @@ class JCmd:
                     return []
                 if incomplete == word:
                     if word in args:
-                        return self._next_data(cur_node.args, word, args[word])
+                        return self.next_data(cur_node.args, word, args[word])
                     return nextargs
                 ignores.add(word)
             nextargs = get_next(
@@ -363,12 +379,12 @@ class JCmd:
         return []
 
     def complete(self, text, state):
-        """Return the next possible completion for 'text'."""
+        """Return the next possible completion to readline library"""
         if state == 0:
             line = readline.get_line_buffer()
             begidx = readline.get_begidx()
             endidx = readline.get_endidx()
-            words, incomplete, args = self.parseline(line, begidx, endidx)
+            words, incomplete, args = self._parseline(line, begidx, endidx)
             self.completion_matches = self.completeline(
                 words, incomplete, args)
         try:
@@ -376,9 +392,8 @@ class JCmd:
         except IndexError:
             return None
 
-    @staticmethod
-    def updateargs(input_args, cmd_args):
-        """Update defaults"""
+    def update_args(self, input_args, cmd_args):
+        """fill out the arguments using the default value if not present."""
         output_args = dict()
         for key, value in cmd_args.items():
             try:
@@ -395,7 +410,7 @@ class JCmd:
         """Execute the command"""
         if not line.strip():
             return self.end
-        words, incomplete, args = self.parseline(line)
+        words, incomplete, args = self._parseline(line)
         cmd_index, cmd_node = self.cmdtree.find(words, bestmatch=True)
 
         # no command
@@ -412,7 +427,7 @@ class JCmd:
                 self.stdout.write("  Failed: %s\n" % (ex))
         elif cmd_node.shell:
             try:
-                inputs = self.updateargs(args, cmd_node.args)
+                inputs = self.update_args(args, cmd_node.args)
                 if not isinstance(cmd_node.shell, list):
                     slist = [cmd_node.shell]
                 else:
@@ -439,13 +454,11 @@ class JCmd:
         return self.end
 
     def default(self, line):
-        """Called on an input line when the command prefix is not recognized.
-        If this method is not overridden, it prints an error message and
-        returns."""
+        """for error messaging"""
         self.stdout.write('*** Unknown syntax: %s\n'%line)
 
     def complete_help(self, remainder, incomplete):
-        """completion function for help"""
+        """completion for help"""
         cur_pos = 0
         cur_node = self.cmdtree
         if incomplete:
@@ -457,25 +470,25 @@ class JCmd:
             try:
                 cur_pos = index + 1
                 cur_node = cur_node[word]
-            except BaseException as ex:
+            except BaseException:
                 cur_pos = index
                 break
         remainder = remainder[cur_pos:]
         if not isinstance(cur_node, dict):
             return cur_node
         for word in remainder:
-            nextwords = self._next_words(
+            nextwords = self.next_words(
                 cur_node, word, ignores=['help'], tail=' ')
             if nextwords:
                 return nextwords
             break
         if not remainder:
-            nextwords = self._next_words(cur_node, ignores=['help'], tail=' ')
+            nextwords = self.next_words(cur_node, ignores=['help'], tail=' ')
             return nextwords
         return []
 
     def do_help(self, words):
-        """show the command help"""
+        """show the command help in detail"""
         targetwords = words[1:]
         if not targetwords:
             targetwords = words
@@ -519,14 +532,14 @@ class JCmd:
         readline.remove_history_item(pos - 1)
 
     def do_eof(self):
-        """ctrl-d (end of Json Command Interface)"""
+        """ctrl-d (end of JSON Command Interface)"""
         self.stdout.write("\n")
         self.end = True
 
 
 if __name__ == "__main__":
     try:
-        argv = sys.argv[1]
-        JCmd(cmdfile=argv).cmdloop()
+        FILENAME = sys.argv[1]
+        JCmd(cmdfile=FILENAME).cmdloop()
     except IndexError:
         JCmd().cmdloop()
