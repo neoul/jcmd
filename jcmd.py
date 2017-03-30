@@ -87,7 +87,7 @@ class JNode(dict):
             except KeyError:
                 self.args = JNode()
             finally:
-                self._update_args()
+                self.update_args()
 
         if "cmddict" in kargs:
             self.load_from_dict(kargs["cmddict"])
@@ -99,8 +99,8 @@ class JNode(dict):
     # def __missing__(self, key):
     #     return JNode()
 
-    def _update_args(self):
-        """Internal method to update arguments of the JSON Command Tree Node"""
+    def update_args(self):
+        """Update the arguments of the JSON Command Tree Node"""
         for key, value in self.args.items():
             if not isinstance(value, dict):
                 self.args[key] = JNode({"help":value})
@@ -139,6 +139,7 @@ class JNode(dict):
 
 class JCmd:
     """Line-oriented Command class using JSON and dictionary"""
+    prompt = PROMPT
     identchars = IDENTCHARS
     intro = "\n [Line-oriented Command Interface using JSON]\n"
     completion_matches = list()
@@ -149,7 +150,6 @@ class JCmd:
     def __init__(
             self, stdin=None, stdout=None, **kargs):
         """Instantiate a JSON Line-oriented Command class"""
-        self.prompt = PROMPT
         self.cmdtree = JNode() # JCmd command tree
         if stdin is not None:
             self.stdin = stdin
@@ -406,6 +406,26 @@ class JCmd:
                 pass
         return output_args
 
+    @staticmethod
+    def format(origin, args):
+        """Fill out the arguments to the command string."""
+        updated = "%s" % (origin)
+        front = origin.find("{{")
+        while front >= 0:
+            tail = origin.find("}}")
+            if tail < 0:
+                break
+            key = origin[front + 2:tail]
+            data = args[key]
+            if isinstance(data, bytes):
+                data = data.decode("utf-8")
+            elif not isinstance(data, str):
+                data = str(data)
+            updated = updated.replace(origin[front : tail + 2], data)
+            origin = origin[tail + 2:]
+            front = origin.find("{{")
+        return updated
+
     def onecmd(self, line):
         """Execute the command"""
         if not line.strip():
@@ -432,7 +452,7 @@ class JCmd:
                     slist = [cmd_node.shell]
                 else:
                     slist = cmd_node.shell
-                cmd_list = [shell.format(**inputs) for shell in slist]
+                cmd_list = [self.format(shell, inputs) for shell in slist]
                 # for cmd_str in cmd_list:
                 #    self.stdout.write('  shell: %s\n' % cmd_str)
                 #    subprocess.run(cmd_str, shell=True, check=True)

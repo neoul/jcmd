@@ -2,7 +2,7 @@
 	"echo": {
 		"help": "print a string on screen",
 		"cmd": {
-			"shell": "echo {string}"
+			"shell": "echo {{string}}"
 		},
 		"args": {
 			"string": {
@@ -13,7 +13,7 @@
 	"sleep": {
 		"help": "print a string on screen",
 		"cmd": {
-			"shell": "sleep {time}"
+			"shell": "sleep {{time}}"
 		},
 		"args": {
 			"time": "sleep time" 

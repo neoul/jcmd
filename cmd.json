@@ -10,7 +10,7 @@
 		"copy": {
 			"help": "copy a source file to the destination",
 			"cmd": {
-				"shell": "cp {src} {dest}"
+				"shell": "cp {{src}} {{dest}}"
 			},
 			"args": {
 				"src": {
@@ -27,35 +27,24 @@
 	"network": {
 		"help": "network tools for diagnostics",
 		"ping": {
-			"help": "network reachability test of a host",
-			"cmd": {
-				"shell": [
-					"ping {ip} -c 5"
-				]
-			},
-			"args": {
-				"ip": "IP address"
-			}
-		},
-		"ping-with-count": {
 			"help": "network reachability test of a host with transmission count",
 			"cmd": {
 				"shell": [
-					"ping {ip} -c {count}"
+					"ping {{ip}} -c {{count}}"
 				]
 			},
 			"args": {
 				"ip": "IP address",
 				"count": {
 					"help": "The number of transmit",
-					"default": 1
+					"default": 5
 				}
 			}
 		},
 		"scan": {
 			"help": "IP network or host port scanning",
 			"cmd": {
-				"shell": ["nmap -v -sn {subnet}/{mask}"]
+				"shell": ["nmap -v -sn {{subnet}}/{{mask}}"]
 			},
 			"args": {
 				"subnet": "IP subnet to scan",
@@ -64,7 +53,7 @@
 			"host-port": {
 				"help": "scan host ports",
 				"cmd": {
-					"shell": ["nmap -v -A {target}"]
+					"shell": ["nmap -v -A {{target}}"]
 				},
 				"args": {
 					"target": "The target host to scan"

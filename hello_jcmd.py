@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # neoul@ymail.com
 """
-Example for Json Command Interface library
+Example for JSON Line-oriented Command class
 """
 import jcmd
 
 class MyCmd(jcmd.JCmd):
-    #prompt = "mycli> "
-    pass
+    prompt = "mycli> "
+
 
 if __name__ == "__main__":
     j = MyCmd()
@@ -15,7 +15,7 @@ if __name__ == "__main__":
         "hello": {
             "help": "jcmd hello example",
             "cmd": {
-                "shell": "echo HELLO {name}"
+                "shell": "echo HELLO {{name}}"
             },
             "args": {
                 "name": "hello argument"
@@ -24,5 +24,4 @@ if __name__ == "__main__":
     }
     j.load(cmddict=hello)
     j.load(cmdfile="cmd.json")
-    j.prompt = "hello> "
     j.cmdloop()
