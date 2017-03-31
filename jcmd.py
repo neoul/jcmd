@@ -26,6 +26,7 @@ Further study
 
 - Scripting
 - Enumeration, range and pattern for argument
+- Command tree setup using YAML
 
 neoul@ymail.com
 """
@@ -36,6 +37,8 @@ import json
 import glob
 import shlex
 import subprocess
+import shutil
+import textwrap
 try:
     import readline
 except ImportError:
@@ -51,6 +54,7 @@ ARGS = "args"
 HELP = "help"
 NO_HELP = "no help"
 FUNC = "func"
+METHOD = "method"
 SHELL = "shell"
 SUBTREE = "subtree"
 EXEC_SHELL = "!"
@@ -65,8 +69,8 @@ class JNode(dict):
     def __init__(self, *args, **kargs):
         self.func = None
         self.shell = None
+        self.method = None
         self.subtree = None
-        self.complete = None
         super().__init__(*args)
         try:
             self.__doc__ = self[HELP]
@@ -141,7 +145,7 @@ class JCmd:
     """Line-oriented Command class using JSON and dictionary"""
     prompt = PROMPT
     identchars = IDENTCHARS
-    intro = "\n [Line-oriented Command Interface using JSON]\n"
+    intro = "\n[Line-oriented Command Interface using JSON]\n"
     completion_matches = list()
     use_rawinput = True
     end = False
@@ -167,13 +171,12 @@ class JCmd:
         except (FileNotFoundError, json.decoder.JSONDecodeError) as ex:
             self.stdout.write("%s\n" % ex)
         except KeyError as ex:
-
             pass
 
         # Built-in commands
         self.cmdtree[EOF] = JNode({
             HELP: "quit jcmd (ctrl+d)",
-            CMD: {FUNC: "self.do_eof()"}})
+            CMD: {METHOD: "do_eof"}})
         self.cmdtree['quit'] = self.cmdtree[EOF]
         self.cmdtree[EXEC_SHELL] = JNode({
             HELP: "execute a shell command",
@@ -182,15 +185,15 @@ class JCmd:
         self.cmdtree[HELP] = JNode({
             HELP: "show a command help",
             CMD: {
-                FUNC: "self.do_help(words)",
-                COMPLETE: "self.complete_help(remainder, incomplete)"
+                METHOD: "do_help",
+                COMPLETE: "complete_help"
             }
         })
         self.cmdtree[BRIEF_HELP] = JNode({
             HELP: "show all the commands' help briefly",
             CMD: {
-                FUNC: "self.do_help_briefly(line, words)",
-                COMPLETE: "self.complete_help(remainder, incomplete)"
+                METHOD: "do_help_briefly",
+                COMPLETE: "complete_help"
             }
         })
 
@@ -325,7 +328,7 @@ class JCmd:
         except BaseException:
             return [cur_arg + '=' + cur_data]
 
-    def completeline(self, words, incomplete, args):
+    def _complete_line(self, words, incomplete, args):
         """Return a list of next candidate completion string to readline."""
         cur_node = self.cmdtree
         remainder = words[:]
@@ -336,8 +339,8 @@ class JCmd:
             try:
                 cur_node = cur_node[word]
                 remove(word)
-                if cur_node.complete:
-                    return eval(cur_node.complete, locals=locals())
+                method = getattr(self, cur_node.complete)
+                return method(cmd_data=locals())
             except KeyError:
                 break
             except AttributeError:
@@ -353,13 +356,14 @@ class JCmd:
                 nextwords += get_next(cur_node.args, tail='=')
             return nextwords
         # check cmds again
-        for word in remainder:
-            nextwords = get_next(cur_node, word, tail=' ')
-            if nextwords:
-                if cur_node.eoc:
-                    nextwords += get_next(cur_node.args, word, tail='=')
-                return nextwords
-            break
+        elif incomplete:
+            for word in remainder:
+                nextwords = get_next(cur_node, word, tail=' ')
+                if nextwords:
+                    if cur_node.eoc:
+                        nextwords += get_next(cur_node.args, word, tail='=')
+                    return nextwords
+                break
         # check args only
         if cur_node.eoc:
             ignores = set()
@@ -385,7 +389,7 @@ class JCmd:
             begidx = readline.get_begidx()
             endidx = readline.get_endidx()
             words, incomplete, args = self._parseline(line, begidx, endidx)
-            self.completion_matches = self.completeline(
+            self.completion_matches = self._complete_line(
                 words, incomplete, args)
         try:
             return self.completion_matches[state]
@@ -435,16 +439,16 @@ class JCmd:
 
         # no command
         if not cmd_node.eoc:
-            return self.default(line)
+            return self.default(cmd_data=locals())
 
         self.end = False
         if cmd_node.func:
             try:
                 exec(cmd_node.func, globals(), locals())
             except KeyError as ex:
-                self.stdout.write("  No argument: %s\n" % (ex))
+                self.stdout.write("** No argument: %s\n" % (ex))
             except BaseException as ex:
-                self.stdout.write("  Failed: %s\n" % (ex))
+                self.stdout.write("** Failed: %s\n" % (ex))
         elif cmd_node.shell:
             try:
                 inputs = self.update_args(args, cmd_node.args)
@@ -453,32 +457,37 @@ class JCmd:
                 else:
                     slist = cmd_node.shell
                 cmd_list = [self.format(shell, inputs) for shell in slist]
-                # for cmd_str in cmd_list:
-                #    self.stdout.write('  shell: %s\n' % cmd_str)
-                #    subprocess.run(cmd_str, shell=True, check=True)
                 cmd_str = ' && '.join(cmd_list)
                 self.stdout.write('  shell: %s\n' % cmd_str)
                 subprocess.run(cmd_str, shell=True, check=True)
 
             except KeyError as ex:
-                self.stdout.write("  No argument: %s\n" % (ex))
+                self.stdout.write("** No argument: %s\n" % (ex))
             except BaseException as ex:
-                self.stdout.write("  Failed: %s\n" % (ex))
+                self.stdout.write("** Failed: %s\n" % (ex))
+        elif cmd_node.method:
+            try:
+                method = getattr(self, cmd_node.method, self.default)
+                method(cmd_data=locals())
+            except AttributeError as ex:
+                self.stdout.write("** No method: %s\n" % (ex))
         elif cmd_node.subtree:
             try:
                 intro = cmd_node.subtree.get("intro")
                 prompt = cmd_node.subtree.get("prompt")
                 JCmd(cmdfile=cmd_node.subtree["file"]).cmdloop(prompt, intro)
             except BaseException as ex:
-                self.stdout.write("  Failed: %s\n" % (ex))
+                self.stdout.write("** Failed: %s\n" % (ex))
         return self.end
 
-    def default(self, line):
+    def default(self, cmd_data):
         """for error messaging"""
-        self.stdout.write('*** Unknown syntax: %s\n'%line)
+        self.stdout.write('** Unknown syntax: %s\n'%cmd_data["line"])
 
-    def complete_help(self, remainder, incomplete):
+    def complete_help(self, cmd_data):
         """completion for help"""
+        remainder = cmd_data["remainder"]
+        incomplete = cmd_data["incomplete"]
         cur_pos = 0
         cur_node = self.cmdtree
         if incomplete:
@@ -496,40 +505,69 @@ class JCmd:
         remainder = remainder[cur_pos:]
         if not isinstance(cur_node, dict):
             return cur_node
+        if not remainder:
+            nextwords = self.next_words(cur_node, ignores=['help'], tail=' ')
+            return nextwords
         for word in remainder:
             nextwords = self.next_words(
                 cur_node, word, ignores=['help'], tail=' ')
             if nextwords:
                 return nextwords
             break
-        if not remainder:
-            nextwords = self.next_words(cur_node, ignores=['help'], tail=' ')
-            return nextwords
         return []
 
-    def do_help(self, words):
+    def do_help(self, cmd_data):
         """show the command help in detail"""
-        targetwords = words[1:]
-        if not targetwords:
+        words = cmd_data["words"]
+        if len(words) > 1:
+            targetwords = words[1:]
+        else:
             targetwords = words
         target_index, target = self.cmdtree.find(targetwords, bestmatch=True)
-        self.stdout.write('  %s\n' % " ".join(targetwords[:target_index]))
-        self.stdout.write('  %s\n' % target.__doc__)
-        if target.eoc:
-            if len(target.args) > 0:
-                self.stdout.write('  required arguments:\n')
+        try:
+            indent = cmd_data["indent_for_brief"]
+            brief = True
+        except KeyError:
+            indent = "  "
+            brief = False
+        if not brief:
+            strlist = [
+                '%s' % " ".join(targetwords[:target_index]),
+                '%s' % target.__doc__]
+            self.pprint(strlist)
+        if target.eoc and len(target.args) > 0:
+            strlist = list()
+            strlist.append('> required arguments')
             for k, value in target.args.items():
                 if isinstance(value, JNode):
-                    self.stdout.write('   - %s: %s\n' % (k, value.__doc__))
+                    strlist.append(' - %s: %s' %(k, value.__doc__))
                 else:
-                    self.stdout.write('   - %s: %s\n' % (k, value))
+                    strlist.append(' - %s: %s' %(k, value))
+            self.pprint(strlist, init_indent=indent, sub_indent=indent+'   ')
 
-    def do_help_briefly(self, line, words):
+    def pprint(self, strsrc, init_indent='  ', sub_indent='  '):
+        """print a string within the terminal width"""
+        if not strsrc:
+            return
+        if not isinstance(strsrc, list):
+            strsrc = [strsrc]
+        tsize = shutil.get_terminal_size((80, 24))
+        write = self.stdout.write
+        for entry in strsrc:
+            lines = textwrap.wrap(
+                entry, width=tsize.columns,
+                initial_indent=init_indent, subsequent_indent=sub_indent)
+            for line in lines:
+                write('%s\n' %line)
+
+    def do_help_briefly(self, cmd_data):
         """show the list of command helps"""
+        line = cmd_data["line"]
+        words = cmd_data["words"]
         if line[-1] == ' ':
             targetwords = words[1:]
             lastword = ''
-        else:
+        else: #incomplete
             targetwords = words[1:-1]
             lastword = words[-1]
         cur_index, cur_node = self.cmdtree.find(targetwords, bestmatch=True)
@@ -537,21 +575,29 @@ class JCmd:
             key for key in cur_node if key.startswith(lastword) and
             key not in COMPLETE_IGNORES]
         if keys:
+            if cur_node.eoc:
+                keys.append("<cr>")
             max_len = max(map(len, keys), default=12)
-            max_len_doc = 74 - max_len
-            hstr = '  {0:<%s}  {1}\n' % (max_len)
+            hstr = '{0:<%s}  {1}\n' % (max_len)
+            strlist = list()
             for key in keys:
-                self.stdout.write(
-                    hstr.format(key, cur_node[key].__doc__[:max_len_doc]))
+                try:
+                    strlist.append(hstr.format(key, cur_node[key].__doc__))
+                except KeyError:
+                    strlist.append(hstr.format(key, cur_node.__doc__))
+                    self.pprint(strlist)
+                    strlist = list()
+                    indent_for_brief = ' ' * (max_len + 4)
+                    self.do_help(locals())
+            self.pprint(strlist)
         else:
             if cur_node.eoc:
-                words[0] = HELP
-                self.do_help(words[:cur_index+1])
+                self.do_help(cmd_data)
         self.line = line.replace("? ", "")
         pos = readline.get_current_history_length()
         readline.remove_history_item(pos - 1)
 
-    def do_eof(self):
+    def do_eof(self, cmd_data):
         """ctrl-d (end of JSON Command Interface)"""
         self.stdout.write("\n")
         self.end = True
