@@ -44,6 +44,17 @@ try:
 except ImportError:
     import pyreadline
 
+def is_windows():
+    try:
+        import platform
+        if platform.system() == 'Windows':
+            return True
+    except ImportError:
+        return False
+    return False
+
+IS_WINDOWS  = is_windows()
+
 __all__ = ["JCmd"]
 
 PROMPT = 'jcmd> '
@@ -53,6 +64,7 @@ CMD = "cmd"
 ARGS = "args"
 HELP = "help"
 NO_HELP = "no help"
+LIST = "list"
 FUNC = "func"
 METHOD = "method"
 SHELL = "shell"
@@ -196,6 +208,7 @@ class JCmd:
                 COMPLETE: "complete_help"
             }
         })
+        self.cmdtree[LIST] = self.cmdtree[BRIEF_HELP]
 
     def load(self, cmdfile='', cmddict=None, cmdjson=''):
         """Load the JCmd command tree"""
@@ -210,7 +223,8 @@ class JCmd:
         """Input hook for adding a string to the new line."""
         if self.line:
             readline.insert_text(self.line)
-            readline.redisplay()
+            if not IS_WINDOWS:
+                readline.redisplay()
             self.line = ''
 
     def cmdloop(self, prompt=None, intro=None):
@@ -222,8 +236,11 @@ class JCmd:
                 self.old_completer = readline.get_completer()
                 readline.set_completer(self.complete)
                 readline.parse_and_bind('tab: complete')
-                readline.parse_and_bind('set comment-begin "? "')
-                readline.parse_and_bind('?: insert-comment')
+                if IS_WINDOWS:
+                    readline.parse_and_bind('?: "\C-alist \C-e\n"')
+                else:
+                    readline.parse_and_bind('set comment-begin "? "')
+                    readline.parse_and_bind('?: insert-comment')
                 delims = readline.get_completer_delims()
                 delims = delims.replace('-', '')
                 delims = delims.replace('.', '')
@@ -593,9 +610,12 @@ class JCmd:
         else:
             if cur_node.eoc:
                 self.do_help(cmd_data)
-        self.line = line.replace("? ", "")
-        pos = readline.get_current_history_length()
-        readline.remove_history_item(pos - 1)
+        self.line = line.replace(LIST, "")
+        self.line = line.replace(BRIEF_HELP, "")
+        self.line = self.line.lstrip()
+        if not IS_WINDOWS:
+            pos = readline.get_current_history_length()
+            readline.remove_history_item(pos - 1)
 
     def do_eof(self, cmd_data):
         """ctrl-d (end of JSON Command Interface)"""
