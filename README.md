@@ -15,7 +15,7 @@ It would be more useful due to the following conveniences.
 - It supports arguments separated from The commands.
 - It supports shell command execution and Python function call.
 - It supports to show the help of the command in detail.
-- It supports the brief command list (The key is mapping to '?')
+- It supports the brief command list (The key is mapping to '?' or 'list')
 - It supports the sub mode.
   - It loads a different command tree at runtime.
 - It supports the default value for the argument.
