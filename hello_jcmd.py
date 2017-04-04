@@ -8,9 +8,8 @@ import jcmd
 class MyCmd(jcmd.JCmd):
     prompt = "mycli> "
 
-
 if __name__ == "__main__":
-    j = MyCmd()
+    j = MyCmd(history=True)
     hello = {
         "hello": {
             "help": "jcmd hello example",
@@ -24,4 +23,5 @@ if __name__ == "__main__":
     }
     j.load(cmddict=hello)
     j.load(cmdfile="cmd.json")
+    print(j.__class__)
     j.cmdloop()

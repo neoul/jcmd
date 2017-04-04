@@ -45,6 +45,7 @@ except ImportError:
     import pyreadline
 
 def is_windows():
+    """Check if the host is windows."""
     try:
         import platform
         if platform.system() == 'Windows':
@@ -53,7 +54,7 @@ def is_windows():
         return False
     return False
 
-IS_WINDOWS  = is_windows()
+IS_WINDOWS = is_windows()
 
 __all__ = ["JCmd"]
 
@@ -159,12 +160,11 @@ class JCmd:
     identchars = IDENTCHARS
     intro = "\n[Line-oriented Command Interface using JSON]\n"
     completion_matches = list()
-    use_rawinput = True
     end = False
     line = ''
 
     def __init__(
-            self, stdin=None, stdout=None, **kargs):
+            self, stdin=None, stdout=None, history=None, **kargs):
         """Instantiate a JSON Line-oriented Command class"""
         self.cmdtree = JNode() # JCmd command tree
         if stdin is not None:
@@ -177,6 +177,12 @@ class JCmd:
             self.stdout = sys.stdout
         self.cmdqueue = []
         self.old_completer = None
+
+        if history:
+            try:
+                readline.read_history_file('.'+ self.__class__.__name__)
+            except FileNotFoundError as ex:
+                self.stdout.write("%s\n" % ex)
 
         try:
             self.load(**kargs)
@@ -210,6 +216,9 @@ class JCmd:
         })
         self.cmdtree[LIST] = self.cmdtree[BRIEF_HELP]
 
+    def __del__(self):
+        readline.write_history_file('.' + self.__class__.__name__)
+
     def load(self, cmdfile='', cmddict=None, cmdjson=''):
         """Load the JCmd command tree"""
         if cmddict:
@@ -231,28 +240,26 @@ class JCmd:
         """Repeatedly issue a prompt, accept input, parse the input, and
         dispatch to execute the function or shell commands."""
         self.preloop()
-        if self.use_rawinput:
-            try:
-                self.old_completer = readline.get_completer()
-                readline.set_completer(self.complete)
-                readline.parse_and_bind('tab: complete')
-                if IS_WINDOWS:
-                    readline.parse_and_bind('?: "\C-alist \C-e\n"')
-                else:
-                    readline.parse_and_bind('set comment-begin "? "')
-                    readline.parse_and_bind('?: insert-comment')
-                delims = readline.get_completer_delims()
-                delims = delims.replace('-', '')
-                delims = delims.replace('.', '')
-                delims = delims.replace('=', '')
-                delims = delims.replace('/', '')
-                delims = delims.replace('~', '')
-                delims = delims.replace('?', '')
-                delims = delims.replace('!', '')
-                readline.set_completer_delims(delims)
-                readline.set_pre_input_hook(self._input_hook)
-            except ImportError:
-                self.stdout.write("Unable to initialize readline.")
+        try:
+            self.old_completer = readline.get_completer()
+            readline.set_completer(self.complete)
+            readline.parse_and_bind('tab: complete')
+            if IS_WINDOWS:
+                readline.parse_and_bind('?: "\C-alist \C-e\n"')
+            else:
+                readline.parse_and_bind('set comment-begin "? "')
+                readline.parse_and_bind('?: insert-comment')
+            delims = readline.get_completer_delims()
+            delims = delims.replace('-', '')
+            delims = delims.replace('.', '')
+            delims = delims.replace('/', '')
+            delims = delims.replace('~', '')
+            delims = delims.replace('?', '')
+            delims = delims.replace('!', '')
+            readline.set_completer_delims(delims)
+            readline.set_pre_input_hook(self._input_hook)
+        except ImportError:
+            self.stdout.write("Unable to initialize readline.")
         try:
             if intro is not None:
                 self.intro = intro
@@ -265,29 +272,19 @@ class JCmd:
                 if self.cmdqueue:
                     line = self.cmdqueue.pop(0)
                 else:
-                    if self.use_rawinput:
-                        try:
-                            line = input(self.prompt)
-                        except EOFError:
-                            line = EOF
-                    else:
-                        self.stdout.write(self.prompt)
-                        self.stdout.flush()
-                        line = self.stdin.readline()
-                        if not len(line):
-                            line = EOF
-                        else:
-                            line = line.rstrip('\r\n')
+                    try:
+                        line = input(self.prompt)
+                    except EOFError:
+                        line = EOF
                 line = self.precmd(line)
                 stop = self.onecmd(line)
                 stop = self.postcmd(stop, line)
             self.postloop()
         finally:
-            if self.use_rawinput:
-                try:
-                    readline.set_completer(self.old_completer)
-                except ImportError:
-                    pass
+            try:
+                readline.set_completer(self.old_completer)
+            except ImportError:
+                pass
 
     def precmd(self, line):
         """Hook method executed just before the command dispatch."""
@@ -317,13 +314,24 @@ class JCmd:
         for i, word in enumerate(words):
             spliter = word.find('=')
             if spliter >= 0:
-                args[word[:spliter]] = word[spliter + 1:]
+                key = word[:spliter]
+                value = word[spliter + 1:]
+                vlist = value.split(',')
+                if len(vlist) > 1:
+                    args[key] = vlist
+                else:
+                    args[key] = value
                 words[i] = word[:spliter]
         if begidx != endidx:
             incomplete = words[-1]
+        if not line:
+            return words, incomplete, args
+        if line[-1] == '=' or line[-1] == ',':
+            incomplete = words[-1]
         return words, incomplete, args
 
-    def next_words(self, cur_node, cur_word='', ignores=(), tail=''):
+    @staticmethod
+    def _next_word(cur_node, cur_word='', ignores=(), tail=''):
         """Return a list of next candidate nodes of the JCmd command tree."""
         try:
             clist = [c + tail for c in cur_node if
@@ -334,16 +342,17 @@ class JCmd:
         else:
             return clist
 
-    def next_data(self, argtree, cur_arg, cur_data):
+    @staticmethod
+    def _next_data(argtree, cur_arg, cur_data=''):
         """Return a list of next candidate data for argument completion."""
+        if isinstance(cur_data, list):
+            cur_data = cur_data[-1]
         try:
             argtype = argtree[cur_arg]["type"]
             if argtype == "path":
-                return list(map(
-                    lambda a: cur_arg + '=' + a,
-                    glob.glob(cur_data + '*')))
+                return list(glob.glob(cur_data + '*'))
         except BaseException:
-            return [cur_arg + '=' + cur_data]
+            return [cur_data]
 
     def _complete_line(self, words, incomplete, args):
         """Return a list of next candidate completion string to readline."""
@@ -366,7 +375,7 @@ class JCmd:
                 return []
         if not isinstance(cur_node, dict):
             return []
-        get_next = self.next_words
+        get_next = JCmd._next_word
         if not remainder:
             nextwords = get_next(cur_node, tail=' ')
             if cur_node.eoc:
@@ -384,19 +393,18 @@ class JCmd:
         # check args only
         if cur_node.eoc:
             ignores = set()
-            for index, word in enumerate(remainder):
-                nextargs = get_next(
-                    cur_node.args, word, ignores, tail='=')
-                if not nextargs:
-                    return []
-                if incomplete == word:
-                    if word in args:
-                        return self.next_data(cur_node.args, word, args[word])
-                    return nextargs
-                ignores.add(word)
-            nextargs = get_next(
-                cur_node.args, ignores=ignores, tail='=')
-            return nextargs
+            for index, key in enumerate(remainder):
+                if key not in cur_node.args:
+                    return get_next(cur_node.args, key, ignores, tail='=')
+                if key not in args:
+                    return get_next(cur_node.args, key, ignores, tail='=')
+                if incomplete == key: # if empty
+                    if not args[key]:
+                        return JCmd._next_data(cur_node.args, key)
+                    else:
+                        return JCmd._next_data(cur_node.args, key, args[key])
+                ignores.add(key)
+            return get_next(cur_node.args, ignores=ignores, tail='=')
         return []
 
     def complete(self, text, state):
@@ -406,6 +414,7 @@ class JCmd:
             begidx = readline.get_begidx()
             endidx = readline.get_endidx()
             words, incomplete, args = self._parseline(line, begidx, endidx)
+            # print('\n', words, incomplete, args, '\n')
             self.completion_matches = self._complete_line(
                 words, incomplete, args)
         try:
@@ -488,6 +497,8 @@ class JCmd:
                 method(cmd_data=locals())
             except AttributeError as ex:
                 self.stdout.write("** No method: %s\n" % (ex))
+            except BaseException as ex:
+                self.stdout.write("** Failed: %s\n" % (ex))
         elif cmd_node.subtree:
             try:
                 intro = cmd_node.subtree.get("intro")
@@ -523,10 +534,10 @@ class JCmd:
         if not isinstance(cur_node, dict):
             return cur_node
         if not remainder:
-            nextwords = self.next_words(cur_node, ignores=['help'], tail=' ')
+            nextwords = JCmd._next_word(cur_node, ignores=['help'], tail=' ')
             return nextwords
         for word in remainder:
-            nextwords = self.next_words(
+            nextwords = JCmd._next_word(
                 cur_node, word, ignores=['help'], tail=' ')
             if nextwords:
                 return nextwords
