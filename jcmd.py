@@ -162,6 +162,7 @@ class JCmd:
     completion_matches = list()
     end = False
     line = ''
+    initcmd = None 
 
     def __init__(
             self, stdin=None, stdout=None, history=None, **kargs):
@@ -215,6 +216,10 @@ class JCmd:
             }
         })
         self.cmdtree[LIST] = self.cmdtree[BRIEF_HELP]
+        if self.initcmd:
+            initcmd = self.initcmd
+            self.initcmd = None
+            self.load(cmddict=initcmd)
 
     def __del__(self):
         readline.write_history_file('.' + self.__class__.__name__)
