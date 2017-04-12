@@ -3,7 +3,7 @@
 The class to build line-oriented command interpreters using JSON and dictionary
 
 This class is used to provide a simple framework for writing line-oriented
-command interpreters. The user-defined commands written in Python dictionary 
+command interpreters. The user-defined commands written in Python dictionary
 or JSON format are loaded and executed by this class.
 
 This class is based on Python cmd library that is a motivation to make it.
@@ -162,7 +162,7 @@ class JCmd:
     completion_matches = list()
     end = False
     line = ''
-    initcmd = None 
+    initcmd = None
 
     def __init__(
             self, stdin=None, stdout=None, history=None, **kargs):
@@ -183,8 +183,7 @@ class JCmd:
             try:
                 readline.read_history_file('.'+ self.__class__.__name__)
             except FileNotFoundError as ex:
-                self.stdout.write("%s\n" % ex)
-
+                pass
         try:
             self.load(**kargs)
         except (FileNotFoundError, json.decoder.JSONDecodeError) as ex:
@@ -217,9 +216,7 @@ class JCmd:
         })
         self.cmdtree[LIST] = self.cmdtree[BRIEF_HELP]
         if self.initcmd:
-            initcmd = self.initcmd
-            self.initcmd = None
-            self.load(cmddict=initcmd)
+            self.load(cmddict=self.initcmd)
 
     def __del__(self):
         readline.write_history_file('.' + self.__class__.__name__)
@@ -427,19 +424,17 @@ class JCmd:
         except IndexError:
             return None
 
-    def update_args(self, input_args, cmd_args):
+    def update_args(self, args, cmd_args):
         """fill out the arguments using the default value if not present."""
-        output_args = dict()
         for key, value in cmd_args.items():
             try:
-                output_args[key] = value["default"]
+                data = args[key]
             except KeyError:
-                pass
-            try:
-                output_args[key] = input_args[key]
-            except KeyError:
-                pass
-        return output_args
+                try:
+                    args[key] = value["default"]
+                except KeyError:
+                    pass
+        return args
 
     @staticmethod
     def format(origin, args):
@@ -473,21 +468,26 @@ class JCmd:
             return self.default(cmd_data=locals())
 
         self.end = False
+        args = self.update_args(args, cmd_node.args)
         if cmd_node.func:
             try:
-                exec(cmd_node.func, globals(), locals())
+                if not isinstance(cmd_node.func, list):
+                    flist = [cmd_node.func]
+                else:
+                    flist = cmd_node.func
+                for func in flist:
+                    exec(func, globals(), locals())
             except KeyError as ex:
                 self.stdout.write("** No argument: %s\n" % (ex))
             except BaseException as ex:
                 self.stdout.write("** Failed: %s\n" % (ex))
         elif cmd_node.shell:
             try:
-                inputs = self.update_args(args, cmd_node.args)
                 if not isinstance(cmd_node.shell, list):
                     slist = [cmd_node.shell]
                 else:
                     slist = cmd_node.shell
-                cmd_list = [self.format(shell, inputs) for shell in slist]
+                cmd_list = [self.format(shell, args) for shell in slist]
                 cmd_str = ' && '.join(cmd_list)
                 self.stdout.write('  shell: %s\n' % cmd_str)
                 subprocess.run(cmd_str, shell=True, check=True)
@@ -574,6 +574,8 @@ class JCmd:
             for k, value in target.args.items():
                 if isinstance(value, JNode):
                     strlist.append(' - %s: %s' %(k, value.__doc__))
+                    if "default" in value:
+                        strlist.append('   default(%s)' %(value["default"]))
                 else:
                     strlist.append(' - %s: %s' %(k, value))
             self.pprint(strlist, init_indent=indent, sub_indent=indent+'   ')
