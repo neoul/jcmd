@@ -30,7 +30,6 @@ Further study
 
 neoul@ymail.com
 """
-
 import sys
 import string
 import json
@@ -180,8 +179,12 @@ class JCmd:
         self.old_completer = None
 
         if history:
+            if not isinstance(history, bool):
+                self.history_file = history
+            else:
+                self.history_file = '.'+ self.__class__.__name__
             try:
-                readline.read_history_file('.'+ self.__class__.__name__)
+                readline.read_history_file(self.history_file)
             except FileNotFoundError as ex:
                 pass
         try:
@@ -219,7 +222,8 @@ class JCmd:
             self.load(cmddict=self.initcmd)
 
     def __del__(self):
-        readline.write_history_file('.' + self.__class__.__name__)
+        print(self.history_file)
+        readline.write_history_file(self.history_file)
 
     def load(self, cmdfile='', cmddict=None, cmdjson=''):
         """Load the JCmd command tree"""
@@ -642,8 +646,10 @@ class JCmd:
 
 
 if __name__ == "__main__":
+    import os
+    home = os.environ['HOME'] 
     try:
         FILENAME = sys.argv[1]
-        JCmd(cmdfile=FILENAME).cmdloop()
+        JCmd(cmdfile=FILENAME, history=home+ "/" + ".jcmdhistory").cmdloop()
     except IndexError:
         JCmd().cmdloop()
