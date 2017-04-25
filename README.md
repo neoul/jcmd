@@ -22,6 +22,31 @@ It would be more useful due to the following conveniences.
 
 ## Usage
 
+### Using JSON command file
+
+
+{
+    "network": {
+        "help": "network tools for diagnostics",
+        "ping": {
+            "help": "network reachability test of a host with transmission count",
+            "cmd": {
+                "shell": [
+                    "ping {{ip}} -c {{count}}"
+                ]
+            },
+            "args": {
+                "ip": "IP address",
+                "count": {
+                    "help": "The number of transmit",
+                    "default": 5
+                }
+            }
+        }
+    }
+}
+
+
 ### Inherited Class
 
 ```
@@ -33,7 +58,6 @@ class MyCmd(jcmd.JCmd):
 j = MyCmd()
 
 ```
-
 
 ## Further study
 
