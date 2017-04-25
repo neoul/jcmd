@@ -1,0 +1,4 @@
+hello name=YOO
+network ping count=1 ip=192.168.1.111
+quit 
+network ping ip=192.168.0.77

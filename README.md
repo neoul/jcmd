@@ -24,7 +24,9 @@ It would be more useful due to the following conveniences.
 
 ### Using JSON command file
 
+cmd.json
 
+``` json
 {
     "network": {
         "help": "network tools for diagnostics",
@@ -45,7 +47,12 @@ It would be more useful due to the following conveniences.
         }
     }
 }
+```
 
+``` shell
+python3 jcmd.py cmd.json
+jcmd> network ping ip=192.168.0.100
+```
 
 ### Inherited Class
 
