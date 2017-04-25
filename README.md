@@ -20,6 +20,20 @@ It would be more useful due to the following conveniences.
   - It loads a different command tree at runtime.
 - It supports the default value for the argument.
 
+## Usage
+
+### Inherited Class
+
+```
+import jcmd
+
+class MyCmd(jcmd.JCmd):
+    prompt = "mycli> "
+
+j = MyCmd()
+
+```
+
 
 ## Further study
 
