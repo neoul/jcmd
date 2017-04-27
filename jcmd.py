@@ -222,8 +222,11 @@ class JCmd:
             self.load(cmddict=self.initcmd)
 
     def __del__(self):
-        print(self.history_file)
-        readline.write_history_file(self.history_file)
+        try:
+            history_file = getattr(self, 'history_file')
+            readline.write_history_file(history_file)
+        except AttributeError:
+            pass
 
     def load(self, cmdfile='', cmddict=None, cmdjson=''):
         """Load the JCmd command tree"""
@@ -647,7 +650,7 @@ class JCmd:
 
 if __name__ == "__main__":
     import os
-    home = os.environ['HOME'] 
+    home = os.environ['HOME']
     try:
         FILENAME = sys.argv[1]
         JCmd(cmdfile=FILENAME, history=home+ "/" + ".jcmdhistory").cmdloop()
