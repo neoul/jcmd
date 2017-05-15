@@ -225,7 +225,7 @@ class JCmd:
         try:
             history_file = getattr(self, 'history_file')
             readline.write_history_file(history_file)
-        except AttributeError:
+        except AttributeError or FileNotFoundError:
             pass
 
     def load(self, cmdfile='', cmddict=None, cmdjson=''):
