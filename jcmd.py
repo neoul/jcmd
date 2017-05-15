@@ -497,7 +497,8 @@ class JCmd:
                 cmd_list = [self.format(shell, args) for shell in slist]
                 cmd_str = ' && '.join(cmd_list)
                 self.stdout.write('  shell: %s\n' % cmd_str)
-                subprocess.run(cmd_str, shell=True, check=True)
+                #subprocess.run(cmd_str, shell=True, check=True)
+                subprocess.check_call(cmd_str, shell=True)
 
             except KeyError as ex:
                 self.stdout.write("** No argument: %s\n" % (ex))
