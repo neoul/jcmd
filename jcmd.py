@@ -199,6 +199,7 @@ class JCmd:
             HELP: "quit jcmd (ctrl+d)",
             CMD: {METHOD: "do_eof"}})
         self.cmdtree['quit'] = self.cmdtree[EOF]
+        self.cmdtree['exit'] = self.cmdtree[EOF]
         self.cmdtree[EXEC_SHELL] = JNode({
             HELP: "execute a shell command",
             CMD: {SHELL: "{{shell-cmd}}"},
