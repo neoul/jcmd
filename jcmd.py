@@ -43,6 +43,7 @@ try:
 except ImportError:
     import pyreadline
 
+
 def is_windows():
     """Check if the host is windows."""
     try:
@@ -52,6 +53,7 @@ def is_windows():
     except ImportError:
         return False
     return False
+
 
 IS_WINDOWS = is_windows()
 
@@ -119,7 +121,7 @@ class JNode(dict):
         """Update the arguments of the JSON Command Tree Node"""
         for key, value in self.args.items():
             if not isinstance(value, dict):
-                self.args[key] = JNode({"help":value})
+                self.args[key] = JNode({"help": value})
 
     def load_from_dict(self, dic):
         """Load JSON Command Tree Node from a dictionary"""
@@ -161,12 +163,12 @@ class JCmd:
     completion_matches = list()
     end = False
     line = ''
-    initcmd = None
+    cmds = None
 
     def __init__(
             self, stdin=None, stdout=None, history=None, **kargs):
         """Instantiate a JSON Line-oriented Command class"""
-        self.cmdtree = JNode() # JCmd command tree
+        self.cmdtree = JNode()  # JCmd command tree
         if stdin is not None:
             self.stdin = stdin
         else:
@@ -182,7 +184,7 @@ class JCmd:
             if not isinstance(history, bool):
                 self.history_file = history
             else:
-                self.history_file = '.'+ self.__class__.__name__
+                self.history_file = '.' + self.__class__.__name__
             try:
                 readline.read_history_file(self.history_file)
             except FileNotFoundError as ex:
@@ -196,9 +198,10 @@ class JCmd:
 
         # Built-in commands
         self.cmdtree[EOF] = JNode({
-            HELP: "quit jcmd (ctrl+d)",
+            HELP: "quit (ctrl+d)",
             CMD: {METHOD: "do_eof"}})
         self.cmdtree['quit'] = self.cmdtree[EOF]
+        self.cmdtree['exit'] = self.cmdtree[EOF]
         self.cmdtree[EXEC_SHELL] = JNode({
             HELP: "execute a shell command",
             CMD: {SHELL: "{{shell-cmd}}"},
@@ -218,8 +221,8 @@ class JCmd:
             }
         })
         self.cmdtree[LIST] = self.cmdtree[BRIEF_HELP]
-        if self.initcmd:
-            self.load(cmddict=self.initcmd)
+        if self.cmds:
+            self.load(cmddict=self.cmds)
 
     def __del__(self):
         try:
@@ -375,7 +378,7 @@ class JCmd:
                 cur_node = cur_node[word]
                 remove(word)
                 method = getattr(self, cur_node.complete)
-                return method(cmd_data=locals())
+                return method(remainder, incomplete)
             except KeyError:
                 break
             except AttributeError:
@@ -407,7 +410,7 @@ class JCmd:
                     return get_next(cur_node.args, key, ignores, tail='=')
                 if key not in args:
                     return get_next(cur_node.args, key, ignores, tail='=')
-                if incomplete == key: # if empty
+                if incomplete == key:  # if empty
                     if not args[key]:
                         return JCmd._next_data(cur_node.args, key)
                     else:
@@ -458,7 +461,7 @@ class JCmd:
                 data = data.decode("utf-8")
             elif not isinstance(data, str):
                 data = str(data)
-            updated = updated.replace(origin[front : tail + 2], data)
+            updated = updated.replace(origin[front: tail + 2], data)
             origin = origin[tail + 2:]
             front = origin.find("{{")
         return updated
@@ -471,25 +474,28 @@ class JCmd:
         cmd_index, cmd_node = self.cmdtree.find(words, bestmatch=True)
 
         # no command
+        self.onecmd_line = line
+        self.onecmd_words = words
+
         if not cmd_node.eoc:
-            return self.default(cmd_data=locals())
+            self.default()
+            del self.onecmd_line
+            del self.onecmd_words
+            return self.end
 
         self.end = False
         args = self.update_args(args, cmd_node.args)
-        if cmd_node.func:
-            try:
+        self.onecmd_args = args
+
+        try:
+            if cmd_node.func:
                 if not isinstance(cmd_node.func, list):
                     flist = [cmd_node.func]
                 else:
                     flist = cmd_node.func
                 for func in flist:
-                    exec(func, globals(), locals())
-            except KeyError as ex:
-                self.stdout.write("** No argument: %s\n" % (ex))
-            except BaseException as ex:
-                self.stdout.write("** Failed: %s\n" % (ex))
-        elif cmd_node.shell:
-            try:
+                    exec(func, globals(), args)
+            elif cmd_node.shell:
                 if not isinstance(cmd_node.shell, list):
                     slist = [cmd_node.shell]
                 else:
@@ -499,36 +505,33 @@ class JCmd:
                 self.stdout.write('  shell: %s\n' % cmd_str)
                 #subprocess.run(cmd_str, shell=True, check=True)
                 subprocess.check_call(cmd_str, shell=True)
-
-            except KeyError as ex:
-                self.stdout.write("** No argument: %s\n" % (ex))
-            except BaseException as ex:
-                self.stdout.write("** Failed: %s\n" % (ex))
-        elif cmd_node.method:
-            try:
+            elif cmd_node.method:
                 method = getattr(self, cmd_node.method, self.default)
-                method(cmd_data=locals())
-            except AttributeError as ex:
-                self.stdout.write("** No method: %s\n" % (ex))
-            except BaseException as ex:
-                self.stdout.write("** Failed: %s\n" % (ex))
-        elif cmd_node.subtree:
-            try:
+                # print("args:", args)
+                method(**args)
+            elif cmd_node.subtree:
                 intro = cmd_node.subtree.get("intro")
                 prompt = cmd_node.subtree.get("prompt")
                 JCmd(cmdfile=cmd_node.subtree["file"]).cmdloop(prompt, intro)
-            except BaseException as ex:
-                self.stdout.write("** Failed: %s\n" % (ex))
+        except AttributeError as ex:
+            self.stdout.write("** No method or func: %s\n" % (ex))
+        except KeyError as ex:
+            self.stdout.write("** No argument: %s\n" % (ex))
+        except BaseException as ex:
+            self.stdout.write("** Failed: %s\n" % (ex))
+        finally:
+            # if getattr(self, "onecmd_line", None):
+            del self.onecmd_line
+            del self.onecmd_words
+            del self.onecmd_args
         return self.end
 
-    def default(self, cmd_data):
+    def default(self, **args):
         """for error messaging"""
-        self.stdout.write('** Unknown syntax: %s\n'%cmd_data["line"])
+        self.stdout.write('** Unknown cmd: %s\n' % self.onecmd_line)
 
-    def complete_help(self, cmd_data):
+    def complete_help(self, remainder, incomplete):
         """completion for help"""
-        remainder = cmd_data["remainder"]
-        incomplete = cmd_data["incomplete"]
         cur_pos = 0
         cur_node = self.cmdtree
         if incomplete:
@@ -557,18 +560,19 @@ class JCmd:
             break
         return []
 
-    def do_help(self, cmd_data):
+    def do_help(self):
         """show the command help in detail"""
-        words = cmd_data["words"]
+        words = self.onecmd_words
         if len(words) > 1:
             targetwords = words[1:]
         else:
             targetwords = words
         target_index, target = self.cmdtree.find(targetwords, bestmatch=True)
         try:
-            indent = cmd_data["indent_for_brief"]
+            indent = self.indent_for_brief
             brief = True
-        except KeyError:
+            del self.indent_for_brief
+        except AttributeError:
             indent = "  "
             brief = False
         if not brief:
@@ -581,11 +585,11 @@ class JCmd:
             strlist.append('> required arguments')
             for k, value in target.args.items():
                 if isinstance(value, JNode):
-                    strlist.append(' - %s: %s' %(k, value.__doc__))
+                    strlist.append(' - %s: %s' % (k, value.__doc__))
                     if "default" in value:
-                        strlist.append('   default(%s)' %(value["default"]))
+                        strlist.append('   default(%s)' % (value["default"]))
                 else:
-                    strlist.append(' - %s: %s' %(k, value))
+                    strlist.append(' - %s: %s' % (k, value))
             self.pprint(strlist, init_indent=indent, sub_indent=indent+'   ')
 
     def pprint(self, strsrc, init_indent='  ', sub_indent='  '):
@@ -601,16 +605,17 @@ class JCmd:
                 entry, width=tsize.columns,
                 initial_indent=init_indent, subsequent_indent=sub_indent)
             for line in lines:
-                write('%s\n' %line)
+                write('%s\n' % line)
 
-    def do_help_briefly(self, cmd_data):
+    def do_help_briefly(self, **args):
         """show the list of command helps"""
-        line = cmd_data["line"]
-        words = cmd_data["words"]
+        line = self.onecmd_line
+        words = self.onecmd_words
+        # print(line, words)
         if line[-1] == ' ':
             targetwords = words[1:]
             lastword = ''
-        else: #incomplete
+        else:  # incomplete
             targetwords = words[1:-1]
             lastword = words[-1]
         cur_index, cur_node = self.cmdtree.find(targetwords, bestmatch=True)
@@ -630,12 +635,12 @@ class JCmd:
                     strlist.append(hstr.format(key, cur_node.__doc__))
                     self.pprint(strlist)
                     strlist = list()
-                    indent_for_brief = ' ' * (max_len + 4)
-                    self.do_help(locals())
+                    self.indent_for_brief = ' ' * (max_len + 4)
+                    self.do_help()
             self.pprint(strlist)
         else:
             if cur_node.eoc:
-                self.do_help(cmd_data)
+                self.do_help()
         self.line = line.replace(LIST, "")
         self.line = line.replace(BRIEF_HELP, "")
         self.line = self.line.lstrip()
@@ -643,7 +648,7 @@ class JCmd:
             pos = readline.get_current_history_length()
             readline.remove_history_item(pos - 1)
 
-    def do_eof(self, cmd_data):
+    def do_eof(self):
         """ctrl-d (end of JSON Command Interface)"""
         self.stdout.write("\n")
         self.end = True
@@ -654,6 +659,6 @@ if __name__ == "__main__":
     home = os.environ['HOME']
     try:
         FILENAME = sys.argv[1]
-        JCmd(cmdfile=FILENAME, history=home+ "/" + ".jcmdhistory").cmdloop()
+        JCmd(cmdfile=FILENAME, history=home + "/" + ".jcmdhistory").cmdloop()
     except IndexError:
         JCmd().cmdloop()

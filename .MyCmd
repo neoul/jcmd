@@ -1,0 +1,22 @@
+method_function name=abc
+method_function name=abc 
+method_function name=a
+quit 
+method_function user_name=abc
+method_func user_name=abc
+quit 
+method_func user_name=abc
+hello name=abc
+sub-cmd 
+exit
+sub-cmd 
+sleep 2
+sleep time=2
+echo abc
+echo string=abc
+quit
+quit 
+method_func user_name=abc
+method_func q
+method_func user_name=a
+quit 

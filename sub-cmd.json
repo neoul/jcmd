@@ -16,7 +16,7 @@
 			"shell": "sleep {{time}}"
 		},
 		"args": {
-			"time": "sleep time" 
+			"time": "sleep time"
 		}
 	}
 }
