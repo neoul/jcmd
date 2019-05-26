@@ -9,7 +9,6 @@ import jcmd
 def my_func(first, second):
     print("my_func", first, second)
 
-
 class JcmdEx1(jcmd.JCmd):
     prompt = "mycli> "
     cmds = {

@@ -105,3 +105,10 @@ if __name__ == "__main__":
 - Scripting
 - Enumeration, range and pattern for argument
 
+## argument options
+
+- type: path
+- default: ANYVALUE
+- range: <1-24>
+- pattern: PATTERN
+- enum: [A,B,C,D]

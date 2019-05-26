@@ -13,10 +13,10 @@
 	"sleep": {
 		"help": "print a string on screen",
 		"cmd": {
-			"shell": "sleep {{time}}"
+			"shell": "sleep {{secs}}"
 		},
 		"args": {
-			"time": "sleep time"
+			"secs": "sleep secs"
 		}
 	}
 }

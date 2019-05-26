@@ -360,9 +360,12 @@ class JCmd:
         if isinstance(cur_data, list):
             cur_data = cur_data[-1]
         try:
-            argtype = argtree[cur_arg]["type"]
+            argtype = argtree[cur_arg].get("type")
+            argenum = argtree[cur_arg].get("enum")
             if argtype == "path":
                 return list(glob.glob(cur_data + '*'))
+            elif len(argenum):
+                return [ each for each in argenum if each.startswith(cur_data) ]
         except BaseException:
             return [cur_data]
 
@@ -434,16 +437,40 @@ class JCmd:
         except IndexError:
             return None
 
+    @staticmethod
+    def check_range(argname, data, data_range):
+        data_range = data_range.strip('<>')
+        r = data_range.split('-')
+        # print(int(r[0]), int(r[-1]), argname, int(data))
+        if len(r) != 2:
+            raise TypeError('invalid range type', argname)
+        if int(r[0]) > int(data) or int(data) > int(r[-1]):
+            raise ValueError('out of range:', argname, ":", data)
+    
+    @staticmethod
+    def check_enum(argname, data, data_enum):
+        if not isinstance(data_enum, list):
+            raise TypeError('invalid enum type', argname)
+        if data not in data_enum:
+            raise ValueError('out of value:', argname, ":", data)
+
     def update_args(self, args, cmd_args):
         """fill out the arguments using the default value if not present."""
+        # Set default value
         for key, value in cmd_args.items():
             try:
                 data = args[key]
+                r = value.get("range")
+                if (r):
+                    JCmd.check_range(key, data, r)
+                e = value.get("enum")
+                if (e):
+                    JCmd.check_enum(key, data, e)
             except KeyError:
                 try:
                     args[key] = value["default"]
                 except KeyError:
-                    pass
+                    raise KeyError(key)
         return args
 
     @staticmethod
@@ -476,6 +503,7 @@ class JCmd:
         # no command
         self.onecmd_line = line
         self.onecmd_words = words
+        self.onecmd_args = args
 
         if not cmd_node.eoc:
             self.default()
@@ -483,11 +511,11 @@ class JCmd:
             del self.onecmd_words
             return self.end
 
-        self.end = False
-        args = self.update_args(args, cmd_node.args)
-        self.onecmd_args = args
-
         try:
+            self.end = False
+            args = self.update_args(args, cmd_node.args)
+            self.onecmd_args = args
+
             if cmd_node.func:
                 if not isinstance(cmd_node.func, list):
                     flist = [cmd_node.func]
@@ -578,16 +606,21 @@ class JCmd:
         if not brief:
             strlist = [
                 '%s' % " ".join(targetwords[:target_index]),
-                '%s' % target.__doc__]
+                ':: %s' % target.__doc__]
             self.pprint(strlist)
         if target.eoc and len(target.args) > 0:
             strlist = list()
-            strlist.append('> required arguments')
+            strlist.append('>> Required Arguments')
             for k, value in target.args.items():
                 if isinstance(value, JNode):
-                    strlist.append(' - %s: %s' % (k, value.__doc__))
+                    vstr = ' - %s: %s' % (k, value.__doc__)
                     if "default" in value:
-                        strlist.append('   default(%s)' % (value["default"]))
+                        vstr = vstr + ' (default:%s)' %(value["default"])
+                    strlist.append(vstr)
+                    if "range" in value:
+                        strlist.append('   range(%s)' % (value["range"]))
+                    if "enum" in value:
+                        strlist.append('   enum(%s)' % (value["enum"]))
                 else:
                     strlist.append(' - %s: %s' % (k, value))
             self.pprint(strlist, init_indent=indent, sub_indent=indent+'   ')
